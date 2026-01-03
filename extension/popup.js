@@ -267,7 +267,7 @@ btnUnlike.addEventListener("click", async () => {
   }
 });
 
-document.getElementById("btnExport").addEventListener("click", async () => {
+document.getElementById("btnExport")?.addEventListener("click", async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
   chrome.tabs.sendMessage(tab.id, { action: "exportLogs" }, (response) => {
@@ -290,7 +290,7 @@ document.getElementById("btnExport").addEventListener("click", async () => {
 });
 
 //Phase 2: Continue session handler
-document.getElementById("btnContinue").addEventListener("click", async () => {
+document.getElementById("btnContinue")?.addEventListener("click", async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
   chrome.tabs.sendMessage(tab.id, { action: "continueSession" }, (response) => {
