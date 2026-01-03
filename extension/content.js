@@ -141,6 +141,7 @@ async function deletePosts(settings) {
           );
           stats.failed++;
           stats.processed++;
+          consecutiveSkips++;
 
           // Close menu
           document.body.click();
@@ -153,8 +154,20 @@ async function deletePosts(settings) {
             stats.success,
             stats.failed
           );
+
+          // If we've skipped 3 tweets in a row, scroll to find new ones
+          if (consecutiveSkips >= 3) {
+            console.log("⚠️ Multiple consecutive skips, scrolling for more...");
+            await scrollToLoad();
+            await sleep(1500);
+            consecutiveSkips = 0; // Reset counter
+          }
+
           continue;
         }
+
+        // Reset consecutive skips on successful delete button found
+        consecutiveSkips = 0;
 
         // Step 3: Click DELETE
         console.log("Clicking delete button...");
@@ -265,8 +278,16 @@ async function deletePosts(settings) {
     console.log(`Successful: ${stats.success}`);
     console.log(`Failed/Skipped: ${stats.failed}`);
 
+    // Determine why we stopped
+    let stopReason = "";
+    if (stats.processed >= settings.maxActions) {
+      stopReason = "(reached max actions)";
+    } else if (emptyScrollCount >= 5) {
+      stopReason = "(no more posts found)";
+    }
+
     sendProgress(
-      `🎉 Complete! Deleted ${stats.success} of ${stats.processed} posts`,
+      `🎉 Complete! Deleted ${stats.success} of ${stats.processed} posts ${stopReason}`,
       stats.processed,
       stats.processed,
       stats.success,
@@ -286,10 +307,31 @@ async function undoRetweets(settings) {
     sendProgress("Looking for retweets...", 0, 0, 0, 0);
 
     let stats = { processed: 0, success: 0, failed: 0 };
-    let consecutiveNoNew = 0;
+    let emptyScrollCount = 0;
+    let consecutiveSkips = 0; // Track consecutive skipped tweets
 
-    while (stats.processed < settings.maxActions && consecutiveNoNew < 3) {
+    sendProgress("Starting delete process...", 0, settings.maxActions, 0, 0);
+
+    while (stats.processed < settings.maxActions && emptyScrollCount < 5) {
+      // Find all tweet articles on current view
       const tweets = document.querySelectorAll('article[data-testid="tweet"]');
+
+      if (tweets.length === 0) {
+        emptyScrollCount++;
+        sendProgress(
+          `Scrolling to find more posts... (${emptyScrollCount}/5)`,
+          stats.processed,
+          settings.maxActions,
+          stats.success,
+          stats.failed
+        );
+        await scrollToLoad();
+        await sleep(2000);
+        continue;
+      }
+
+      // Reset empty counter when we find tweets
+      emptyScrollCount = 0;
 
       for (const tweet of tweets) {
         if (stats.processed >= settings.maxActions) break;
