@@ -105,6 +105,57 @@ Total maksimum aksi yang akan dilakukan.
 - **0** = Process semua (unlimited)
 - **Set limit** untuk safety (contoh: 100)
 
+## 🎯 Recommended Settings
+
+### ⚡ Quick & Safe (Pemula)
+
+**Best for:** Testing, akun penting, delete posts
+
+```
+Delay: 8-10 seconds
+Batch Size: 10
+Max Actions: 20-50
+```
+
+### ⚙️ Balanced (Daily Use)
+
+**Best for:** Regular usage, undo retweets/likes, akun established
+
+```
+Delay: 5-7 seconds
+Batch Size: 20
+Max Actions: 50-100
+```
+
+### 🚀 Aggressive (Caution!)
+
+**Best for:** Akun dummy, mass cleanup, undo likes only
+
+```
+Delay: 3-5 seconds
+Batch Size: 30-50
+Max Actions: 100-500
+```
+
+⚠️ Higher risk of rate limiting!
+
+### Per-Action Recommendations
+
+| Action            | Conservative    | Moderate        | Aggressive      |
+| ----------------- | --------------- | --------------- | --------------- |
+| **Delete Posts**  | 10s, B:10, M:20 | 8s, B:15, M:50  | 5s, B:20, M:100 |
+| **Undo Retweets** | 8s, B:15, M:50  | 5s, B:20, M:100 | 3s, B:30, M:200 |
+| **Undo Likes**    | 5s, B:20, M:100 | 3s, B:30, M:200 | 3s, B:50, M:500 |
+
+**Legend:** B = Batch Size, M = Max Actions
+
+### 💡 Pro Tips
+
+- **Best time:** Night (00:00-06:00) atau weekend
+- **Start small:** Day 1 = 20 actions, gradually increase
+- **Session breaks:** Wait 3-4 hours between sessions
+- **Stop if:** Rate limit error, verification request, atau warnings
+
 ## 🛡️ Safety Tips
 
 1. **Start Small**
