@@ -935,31 +935,116 @@ async function deleteReplies(settings) {
           }
         }
 
-        // Check if it's a reply (has "Membalas" or "Replying to")
-        const tweetText = tweet.textContent.toLowerCase();
-        const isReply =
-          tweetText.includes("membalas") || tweetText.includes("replying to");
+        // SIMPLIFIED & DEBUG: Reply detection with extensive logging
+        console.log("\n🔍 === ANALYZING TWEET ===");
+
+        let isReply = false;
+        const username = window.location.pathname.split("/")[1];
+
+        // STRATEGY: On /with_replies page, be VERY lenient
+        // Most tweets shown there ARE replies unless they're clearly not
+
+        // Method 1: Simple text search for reply indicators ANYWHERE in tweet
+        const fullText = tweet.textContent;
+        console.log(`Tweet text preview: "${fullText.substring(0, 100)}..."`);
+
+        if (
+          fullText.toLowerCase().includes("membalas @") ||
+          fullText.toLowerCase().includes("replying to @") ||
+          fullText.toLowerCase().includes("balasan untuk @")
+        ) {
+          console.log("✅ METHOD 1: Found reply text indicator");
+          isReply = true;
+        }
+
+        // Method 2: AGGRESSIVE - On /with_replies, if tweet has MORE button (caret), assume it's yours
+        // If it's yours and on this page, it's LIKELY a reply
+        const moreButton = tweet.querySelector('[data-testid="caret"]');
+        const hasMoreButton = !!moreButton;
+        console.log(`Has more button (yours): ${hasMoreButton}`);
+
+        if (
+          !isReply &&
+          hasMoreButton &&
+          window.location.pathname.includes("/with_replies")
+        ) {
+          // Check if it's clearly NOT a reply:
+          // - Has NO mentions at all
+          const hasMentions = fullText.includes("@");
+          console.log(`Has @ mentions: ${hasMentions}`);
+
+          if (hasMentions) {
+            console.log(
+              "✅ METHOD 2: Your tweet with mentions on /with_replies = likely a reply"
+            );
+            isReply = true;
+          }
+        }
+
+        // Method 3: Check all divs for reply starting text
+        if (!isReply) {
+          const allText = [];
+          tweet.querySelectorAll("div").forEach((div) => {
+            const txt = div.textContent.trim();
+            if (txt && txt.length > 0 && txt.length < 100) {
+              allText.push(txt);
+            }
+          });
+
+          console.log(`Checking ${allText.length} text elements...`);
+          for (let i = 0; i < Math.min(5, allText.length); i++) {
+            const txt = allText[i].toLowerCase();
+            console.log(`  [${i}]: "${txt.substring(0, 50)}"`);
+
+            if (txt.startsWith("membalas") || txt.startsWith("replying to")) {
+              console.log(
+                `✅ METHOD 3: Found reply indicator at position ${i}`
+              );
+              isReply = true;
+              break;
+            }
+          }
+        }
+
+        // Method 4: FALLBACK - If NOTHING else works, check tweet structure
+        // Replies often have different aria-labels
+        if (!isReply) {
+          const allAriaLabels = [];
+          tweet.querySelectorAll("[aria-label]").forEach((el) => {
+            const label = el.getAttribute("aria-label");
+            if (label) allAriaLabels.push(label);
+          });
+
+          console.log(`Found ${allAriaLabels.length} aria-labels`);
+          for (const label of allAriaLabels.slice(0, 3)) {
+            console.log(`  Aria: "${label}"`);
+          }
+        }
+
+        console.log(`\n➡️ FINAL DECISION: isReply = ${isReply}`);
 
         if (!isReply) {
-          console.log("⊝ Not a reply, skipping...");
+          console.log("⊝ Not detected as a reply, skipping...\n");
           consecutiveSkips++;
 
-          if (consecutiveSkips >= 5) {
-            console.log("❌ Too many non-replies, stopping");
+          if (consecutiveSkips >= 15) {
+            console.log("❌ Stopped after 15 consecutive non-replies");
             break;
           }
 
           await scrollToLoad();
-          await sleep(500);
+          await sleep(800);
           continue;
         }
 
+        console.log("✅ DETECTED AS REPLY - Processing...\n");
+
         consecutiveSkips = 0;
 
-        // Find and click MORE button
-        const moreButton = tweet.querySelector('[data-testid="caret"]');
+        // Find and click MORE button (three dots)
+        const deleteMenuButton = tweet.querySelector('[data-testid="caret"]');
 
-        if (!moreButton) {
+        if (!deleteMenuButton) {
           console.log("⚠️ No more button, scrolling...");
           await scrollToLoad();
           await sleep(1000);
@@ -975,7 +1060,7 @@ async function deleteReplies(settings) {
         );
         console.log("✓ Found more button, clicking...");
 
-        moreButton.click();
+        deleteMenuButton.click();
         await sleep(1000);
 
         // Find DELETE button
