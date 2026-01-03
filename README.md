@@ -2,6 +2,12 @@
 
 **Safe Twitter/X Automation via Chrome Extension**
 
+## 📸 Preview
+
+![Extension Preview](extension/preview.png)
+
+_Beautiful purple gradient UI with real-time progress tracking_
+
 ## 🎯 Overview
 
 X Bot Helper adalah Chrome Extension yang membantu Anda melakukan bulk actions di Twitter/X dengan cara yang **LEBIH AMAN** daripada menggunakan automated browser.
@@ -51,6 +57,29 @@ X Bot Helper adalah Chrome Extension yang membantu Anda melakukan bulk actions d
    - Max Actions: 0 for unlimited, or set limit
 5. **Click action button**
 6. **Watch progress** in popup!
+
+## ✨ Features Showcase
+
+### 🎨 Beautiful Interface
+
+- Modern purple gradient design
+- Intuitive controls
+- Real-time statistics
+- Progress bar visualization
+
+### 🛡️ Safety First
+
+- Customizable delays (3-60 seconds)
+- Batch processing with rest periods
+- Action limits to prevent overuse
+- Human-like random delays
+
+### 📊 Live Tracking
+
+- **Processed:** Total actions attempted
+- **Success:** Successfully completed
+- **Failed:** Errors or skipped items
+- **Progress bar** showing completion percentage
 
 ## ⚙️ Configuration
 
