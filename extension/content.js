@@ -1419,11 +1419,31 @@ async function unfollowNonFollowers(settings) {
         }
       }
 
-      // If no new users found, scroll
+      // If no new users found, scroll and retry
       if (!foundNewUser) {
-        console.log("⚠️ No new users in current view");
+        emptyScrollCount++;
+        console.log(`⚠️ No new users in current view (${emptyScrollCount}/5)`);
+
+        // Don't give up too quickly - scroll more before stopping
+        if (emptyScrollCount >= 5) {
+          console.log("❌ No more users found after 5 scrolls");
+          break;
+        }
+
+        sendProgress(
+          `Scrolling for more users... (${emptyScrollCount}/5)`,
+          stats.processed,
+          settings.maxActions,
+          stats.success,
+          stats.failed
+        );
         await scrollToLoad();
         await sleep(2000);
+      } else {
+        // Reset counter when we find new users
+        emptyScrollCount = 0;
+        await scrollToLoad();
+        await sleep(1000);
       }
     }
 
