@@ -24,157 +24,258 @@ async function scrollToLoad() {
 
 // Send progress update to popup
 function sendProgress(message, processed, total, success, failed) {
+  console.log(
+    `📊 Progress: ${message} | P:${processed} S:${success} F:${failed}`
+  );
   chrome.runtime.sendMessage({
     type: "progress",
-    data: {
-      message,
-      processed,
-      total,
-      success,
-      failed,
-    },
+    data: { message, processed, total, success, failed },
   });
 }
 
 // Send completion message
 function sendComplete() {
+  console.log("✅ Process complete");
   chrome.runtime.sendMessage({ type: "complete" });
 }
 
 // Send error message
 function sendError(message) {
-  chrome.runtime.sendMessage({
-    type: "error",
-    message,
-  });
+  console.error("❌ Error:", message);
+  chrome.runtime.sendMessage({ type: "error", message });
 }
 
-// Delete Posts Action
+// IMPROVED Delete Posts Action
 async function deletePosts(settings) {
   try {
-    sendProgress("Navigating to profile...", 0, 0, 0, 0);
+    console.log("🗑️ Starting delete posts with settings:", settings);
+    sendProgress("Checking profile page...", 0, 0, 0, 0);
 
-    // Get username from page
-    const usernameElement = document.querySelector('[data-testid="UserName"]');
-    if (!usernameElement) {
+    // Verify on profile page
+    if (!window.location.pathname.match(/^\/[^\/]+\/?$/)) {
       throw new Error(
-        "Could not find username. Please go to your profile page."
+        "Please navigate to YOUR profile page first! (e.g., x.com/yourusername)"
       );
     }
 
-    // Navigate to own profile if not already there
-    if (
-      !window.location.pathname.includes("/") ||
-      window.location.pathname === "/home"
-    ) {
-      const profileLink = document.querySelector('a[href*="/"]');
-      if (profileLink) {
-        profileLink.click();
-        await sleep(3000);
-      }
-    }
-
     let stats = { processed: 0, success: 0, failed: 0 };
-    let consecutiveNoNew = 0;
+    let emptyScrollCount = 0;
 
-    while (stats.processed < settings.maxActions && consecutiveNoNew < 3) {
-      // Find all tweet articles
-      const tweets = document.querySelectorAll('article[data-testid="tweet"]');
+    while (stats.processed < settings.maxActions && emptyScrollCount < 5) {
+      console.log(
+        `\n--- Loop iteration: processed=${stats.processed}, limit=${settings.maxActions} ---`
+      );
+
+      // Find tweets
+      const tweets = Array.from(
+        document.querySelectorAll('article[data-testid="tweet"]')
+      );
+      console.log(`Found ${tweets.length} tweets on page`);
 
       if (tweets.length === 0) {
-        consecutiveNoNew++;
+        emptyScrollCount++;
+        console.log(`No tweets found, empty count: ${emptyScrollCount}/5`);
+        sendProgress(
+          `Scrolling to find posts... (${emptyScrollCount}/5)`,
+          stats.processed,
+          settings.maxActions,
+          stats.success,
+          stats.failed
+        );
         await scrollToLoad();
         continue;
       }
 
-      sendProgress(
-        `Found ${tweets.length} posts. Processing...`,
-        stats.processed,
-        settings.maxActions,
-        stats.success,
-        stats.failed
-      );
+      emptyScrollCount = 0;
 
-      for (const tweet of tweets) {
-        if (stats.processed >= settings.maxActions) break;
+      // Process FIRST tweet only (one by one)
+      const tweet = tweets[0];
+      console.log(`\n🎯 Processing tweet ${stats.processed + 1}`);
 
-        try {
-          // Find more button (three dots)
-          const moreButton = tweet.querySelector('[data-testid="caret"]');
-          if (!moreButton) continue;
+      try {
+        // Step 1: Find and click MORE button (three dots)
+        const moreButton = tweet.querySelector('[data-testid="caret"]');
 
-          // Click more button
-          moreButton.click();
+        if (!moreButton) {
+          console.log(
+            "⚠️ No more button (might be promoted tweet), scrolling..."
+          );
+          await scrollToLoad();
+          await sleep(1000);
+          continue;
+        }
+
+        sendProgress(
+          `📝 Opening menu for post ${stats.processed + 1}...`,
+          stats.processed,
+          settings.maxActions,
+          stats.success,
+          stats.failed
+        );
+        console.log("✓ Found more button, clicking...");
+
+        moreButton.click();
+        await sleep(1000); // Wait for menu to open
+
+        // Step 2: Find DELETE button in menu
+        console.log("Looking for delete button in menu...");
+        const menuItems = Array.from(
+          document.querySelectorAll('[role="menuitem"]')
+        );
+        console.log(`Found ${menuItems.length} menu items`);
+
+        let deleteButton = null;
+        for (const item of menuItems) {
+          const text = item.textContent.toLowerCase();
+          console.log(`  - Menu item: "${text}"`);
+          if (text.includes("delete") || text.includes("hapus")) {
+            deleteButton = item;
+            console.log("  ✓ Found DELETE button!");
+            break;
+          }
+        }
+
+        if (!deleteButton) {
+          console.log(
+            "❌ No delete button found (might be someone else's tweet or retweet)"
+          );
+          stats.failed++;
+          stats.processed++;
+
+          // Close menu
+          document.body.click();
           await sleep(500);
 
-          // Find delete option
-          const deleteButton = document.querySelector(
-            '[data-testid="Dropdown"] [role="menuitem"]'
-          );
-          if (
-            deleteButton &&
-            deleteButton.textContent.toLowerCase().includes("delete")
-          ) {
-            deleteButton.click();
-            await sleep(500);
-
-            // Confirm delete
-            const confirmButton = document.querySelector(
-              '[data-testid="confirmationSheetConfirm"]'
-            );
-            if (confirmButton) {
-              confirmButton.click();
-              stats.success++;
-              await sleep(
-                randomDelay(settings.delay * 0.8, settings.delay * 1.2)
-              );
-            }
-          } else {
-            // Close menu if no delete option
-            document.body.click();
-            await sleep(200);
-          }
-
-          stats.processed++;
           sendProgress(
-            `Deleted ${stats.success} posts...`,
+            `⊝ Skipped post ${stats.processed} (can\'t delete)`,
             stats.processed,
             settings.maxActions,
             stats.success,
             stats.failed
           );
-
-          // Batch rest
-          if (stats.processed % settings.batchSize === 0) {
-            sendProgress(
-              "Taking a break...",
-              stats.processed,
-              settings.maxActions,
-              stats.success,
-              stats.failed
-            );
-            await sleep(30000); // 30 second break
-          }
-        } catch (err) {
-          stats.failed++;
-          console.error("Error deleting tweet:", err);
+          continue;
         }
+
+        // Step 3: Click DELETE
+        console.log("Clicking delete button...");
+        deleteButton.click();
+        await sleep(1000); // Wait for confirmation dialog
+
+        // Step 4: Find and click CONFIRM button
+        console.log("Looking for confirmation button...");
+        const confirmButton = document.querySelector(
+          '[data-testid="confirmationSheetConfirm"]'
+        );
+
+        if (!confirmButton) {
+          console.log("❌ Confirmation button not found!");
+          stats.failed++;
+          stats.processed++;
+
+          // Try to close dialog
+          const escEvent = new KeyboardEvent("keydown", {
+            key: "Escape",
+            code: "Escape",
+            keyCode: 27,
+          });
+          document.dispatchEvent(escEvent);
+          await sleep(500);
+
+          sendProgress(
+            `⊝ Failed to confirm delete ${stats.processed}`,
+            stats.processed,
+            settings.maxActions,
+            stats.success,
+            stats.failed
+          );
+          continue;
+        }
+
+        console.log("✓ Found confirm button, clicking...");
+        confirmButton.click();
+
+        // SUCCESS!
+        stats.success++;
+        stats.processed++;
+
+        console.log(`✅ Successfully deleted tweet ${stats.processed}!`);
+        sendProgress(
+          `✅ Deleted ${stats.success}/${stats.processed} posts`,
+          stats.processed,
+          settings.maxActions,
+          stats.success,
+          stats.failed
+        );
+
+        // Wait for deletion to complete
+        await sleep(2000);
+
+        // Human-like delay before next action
+        const delay = randomDelay(settings.delay * 0.8, settings.delay * 1.2);
+        const delaySec = Math.round(delay / 1000);
+        console.log(`⏳ Waiting ${delaySec}s before next action...`);
+        sendProgress(
+          `⏳ Waiting ${delaySec}s before next...`,
+          stats.processed,
+          settings.maxActions,
+          stats.success,
+          stats.failed
+        );
+        await sleep(delay);
+
+        // Batch rest
+        if (stats.processed % settings.batchSize === 0) {
+          console.log(
+            `📊 Batch complete (${stats.processed}), taking 30s break...`
+          );
+          sendProgress(
+            "☕ Taking 30s break...",
+            stats.processed,
+            settings.maxActions,
+            stats.success,
+            stats.failed
+          );
+          await sleep(30000);
+        }
+      } catch (err) {
+        console.error("❌ Error processing tweet:", err);
+        stats.failed++;
+        stats.processed++;
+
+        // Close any open dialogs
+        document.body.click();
+        await sleep(500);
+
+        sendProgress(
+          `❌ Error on tweet ${stats.processed}`,
+          stats.processed,
+          settings.maxActions,
+          stats.success,
+          stats.failed
+        );
       }
 
-      // Scroll to load more
-      await scrollToLoad();
-      consecutiveNoNew = tweets.length === 0 ? consecutiveNoNew + 1 : 0;
+      // Small delay before next iteration
+      await sleep(1000);
     }
 
+    // Final summary
+    console.log("\n=== DELETE COMPLETE ===");
+    console.log(`Total processed: ${stats.processed}`);
+    console.log(`Successful: ${stats.success}`);
+    console.log(`Failed/Skipped: ${stats.failed}`);
+
     sendProgress(
-      `✅ Complete! Deleted ${stats.success} posts.`,
+      `🎉 Complete! Deleted ${stats.success} of ${stats.processed} posts`,
       stats.processed,
       stats.processed,
       stats.success,
       stats.failed
     );
+    await sleep(1000);
     sendComplete();
   } catch (error) {
+    console.error("Fatal error in deletePosts:", error);
     sendError(error.message);
   }
 }
@@ -188,14 +289,12 @@ async function undoRetweets(settings) {
     let consecutiveNoNew = 0;
 
     while (stats.processed < settings.maxActions && consecutiveNoNew < 3) {
-      // Find all retweeted posts
       const tweets = document.querySelectorAll('article[data-testid="tweet"]');
 
       for (const tweet of tweets) {
         if (stats.processed >= settings.maxActions) break;
 
         try {
-          // Look for unretweet button
           const unretweetButton = tweet.querySelector(
             '[data-testid="unretweet"]'
           );
@@ -204,7 +303,6 @@ async function undoRetweets(settings) {
             unretweetButton.click();
             await sleep(500);
 
-            // Confirm unretweet
             const confirmButton = document.querySelector(
               '[data-testid="unretweetConfirm"]'
             );
@@ -225,7 +323,6 @@ async function undoRetweets(settings) {
               stats.failed
             );
 
-            // Batch rest
             if (stats.processed % settings.batchSize === 0) {
               sendProgress(
                 "Taking a break...",
@@ -265,7 +362,6 @@ async function undoLikes(settings) {
   try {
     sendProgress("Navigating to likes page...", 0, 0, 0, 0);
 
-    // Navigate to likes page if not already there
     if (!window.location.pathname.includes("/likes")) {
       const username = window.location.pathname.split("/")[1];
       window.location.href = `https://x.com/${username}/likes`;
@@ -282,7 +378,6 @@ async function undoLikes(settings) {
         if (stats.processed >= settings.maxActions) break;
 
         try {
-          // Look for unlike button
           const unlikeButton = tweet.querySelector('[data-testid="unlike"]');
 
           if (unlikeButton) {
@@ -301,7 +396,6 @@ async function undoLikes(settings) {
               stats.failed
             );
 
-            // Batch rest
             if (stats.processed % settings.batchSize === 0) {
               sendProgress(
                 "Taking a break...",
@@ -340,9 +434,17 @@ async function undoLikes(settings) {
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   // Ping to check if content script is loaded
   if (request.action === "ping") {
+    console.log("📡 Ping received");
     sendResponse({ status: "ready" });
     return true;
   }
+
+  console.log(
+    "📨 Received action:",
+    request.action,
+    "with settings:",
+    request.settings
+  );
 
   if (request.action === "delete_posts") {
     deletePosts(request.settings);
