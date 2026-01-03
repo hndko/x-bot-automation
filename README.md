@@ -350,3 +350,12 @@ Extension sudah siap dipakai. Install di Chrome dan mulai automasi yang lebih am
 ---
 
 **Happy (Safe) Automating! 🚀**
+
+## 👨‍💻 Credits
+
+**Developer:** Kyoo  
+**Organization:** Mari Partner
+
+---
+
+*Made with ❤️ for safer Twitter automation*

@@ -1,15 +1,9 @@
 // Content Script - Runs on Twitter/X pages
 console.log("X Bot Helper: Content script loaded");
-console.log("👨‍💻 Made by Kyoo | 🏢 Mari Partner");
 
 // Global state for pause/resume and stop
 let globalPaused = false;
 let globalStop = false;
-
-// Global state for Phase 2 features
-let actionLogs = []; // For export
-let failedItems = []; // For auto-retry
-let savedProgress = null; // For persistence
 
 // Helper function: sleep/delay
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -72,52 +66,6 @@ function isDateInRange(tweetDate, dateFrom, dateTo) {
   }
 
   return true;
-}
-
-// Helper function: log action for export
-function logAction(action, status, tweetUrl = "", details = "") {
-  const log = {
-    timestamp: new Date().toISOString(),
-    action: action,
-    status: status, // success/failed/skipped
-    tweetUrl: tweetUrl,
-    details: details,
-  };
-  actionLogs.push(log);
-
-  // Also save to localStorage for persistence
-  try {
-    chrome.storage.local.set({ actionLogs: actionLogs });
-  } catch (e) {
-    console.warn("Failed to save logs:", e);
-  }
-}
-
-// Helper function: save progress for persistence
-async function saveProgress(action, stats, settings) {
-  const progress = {
-    action: action,
-    stats: stats,
-    settings: settings,
-    timestamp: new Date().toISOString(),
-  };
-
-  try {
-    await chrome.storage.local.set({ savedProgress: progress });
-    console.log("💾 Progress saved");
-  } catch (e) {
-    console.warn("Failed to save progress:", e);
-  }
-}
-
-// Helper function: clear saved progress
-async function clearProgress() {
-  try {
-    await chrome.storage.local.remove("savedProgress");
-    console.log("🗑️ Progress cleared");
-  } catch (e) {
-    console.warn("Failed to clear progress:", e);
-  }
 }
 
 // Send progress update to popup
@@ -191,21 +139,6 @@ async function deletePosts(settings) {
       console.log(`\n🎯 Processing tweet ${stats.processed + 1}`);
 
       try {
-        // Check pause/stop state
-        await checkPauseAndStop();
-
-        // Check date filter (if enabled)
-        if (settings.dateFrom || settings.dateTo) {
-          const tweetDate = getTweetDate(tweet);
-          if (!isDateInRange(tweetDate, settings.dateFrom, settings.dateTo)) {
-            console.log("📅 Tweet outside date range, skipping...");
-            stats.processed++;
-            await scrollToLoad();
-            await sleep(500);
-            continue;
-          }
-        }
-
         // Step 1: Find and click MORE button (three dots)
         const moreButton = tweet.querySelector('[data-testid="caret"]');
 
@@ -318,55 +251,23 @@ async function deletePosts(settings) {
         }
 
         console.log("✓ Found confirm button, clicking...");
+        confirmButton.click();
 
-        // DRY RUN MODE: Skip actual deletion
-        if (settings.dryRun) {
-          console.log("🧪 DRY RUN: Would delete this post");
-          stats.success++;
-          stats.processed++;
+        // SUCCESS!
+        stats.success++;
+        stats.processed++;
 
-          // Close the dialog
-          const escEvent = new KeyboardEvent("keydown", {
-            key: "Escape",
-            code: "Escape",
-            keyCode: 27,
-          });
-          document.dispatchEvent(escEvent);
-          await sleep(500);
+        console.log(`✅ Successfully deleted tweet ${stats.processed}!`);
+        sendProgress(
+          `✅ Deleted ${stats.success}/${stats.processed} posts`,
+          stats.processed,
+          settings.maxActions,
+          stats.success,
+          stats.failed
+        );
 
-          sendProgress(
-            `🧪 DRY RUN: Would delete ${stats.success}/${stats.processed}`,
-            stats.processed,
-            settings.maxActions,
-            stats.success,
-            stats.failed
-          );
-
-          // Small delay to simulate
-          await sleep(1000);
-        } else {
-          // ACTUAL DELETE
-          confirmButton.click();
-
-          // SUCCESS!
-          stats.success++;
-          stats.processed++;
-
-          console.log(`✅ Successfully deleted tweet ${stats.processed}!`);
-          sendProgress(
-            `✅ Deleted ${stats.success}/${stats.processed} posts`,
-            stats.processed,
-            settings.maxActions,
-            stats.success,
-            stats.failed
-          );
-
-          // Wait for deletion to complete
-          await sleep(2000);
-        }
-
-        // Check pause state before delay
-        await checkPauseAndStop();
+        // Wait for deletion to complete
+        await sleep(2000);
 
         // Human-like delay before next action
         const delay = randomDelay(settings.delay * 0.8, settings.delay * 1.2);
@@ -380,9 +281,6 @@ async function deletePosts(settings) {
           stats.failed
         );
         await sleep(delay);
-
-        // Check pause again after delay
-        await checkPauseAndStop();
 
         // Batch rest
         if (stats.processed % settings.batchSize === 0) {
@@ -635,57 +533,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     "with settings:",
     request.settings
   );
-
-  // Handle pause/resume
-  if (request.action === "togglePause") {
-    globalPaused = request.paused;
-    console.log(globalPaused ? "⏸️ PAUSED" : "▶️ RESUMED");
-    sendResponse({ status: "paused", paused: globalPaused });
-    return true;
-  }
-
-  // Handle stop
-  if (request.action === "stop") {
-    globalStop = true;
-    console.log("🛑 STOP requested");
-    sendResponse({ status: "stopped" });
-    return true;
-  }
-
-  // Handle export logs
-  if (request.action === "exportLogs") {
-    console.log(`📊 Exporting ${actionLogs.length} logs`);
-    sendResponse({ logs: actionLogs });
-    return true;
-  }
-
-  // Handle continue session
-  if (request.action === "continueSession") {
-    chrome.storage.local.get(["savedProgress"], (result) => {
-      if (result.savedProgress) {
-        const progress = result.savedProgress;
-        console.log("⏩ Continuing session:", progress.action);
-
-        // Resume the action with saved state
-        if (progress.action === "delete_posts") {
-          deletePosts(progress.settings, progress.stats);
-        } else if (progress.action === "undo_retweets") {
-          undoRetweets(progress.settings, progress.stats);
-        } else if (progress.action === "undo_likes") {
-          undoLikes(progress.settings, progress.stats);
-        }
-
-        sendResponse({ continued: true });
-      } else {
-        sendResponse({ continued: false });
-      }
-    });
-    return true;
-  }
-
-  // Reset global state for new actions
-  globalPaused = false;
-  globalStop = false;
 
   if (request.action === "delete_posts") {
     deletePosts(request.settings);
