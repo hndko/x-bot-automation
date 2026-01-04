@@ -4,7 +4,8 @@
 
 ## 📸 Preview
 
-![Extension Preview](extension/preview.png)
+![Extension Preview](docs/screenshots//preview.png)
+![Extension Preview](docs/screenshots/features.png)
 
 ## 🎯 Quick Links
 
