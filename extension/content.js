@@ -1285,7 +1285,7 @@ async function unfollowNonFollowers(settings) {
         continue;
       }
 
-      emptyScrollCount = 0;
+      // Don't reset here - only reset when we actually find NEW unprocessed users
       let foundNewUser = false;
 
       for (const userCell of userCells) {
